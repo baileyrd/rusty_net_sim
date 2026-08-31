@@ -49,6 +49,36 @@ impl RemoteStateSource for ServerOnlySource {
     }
 }
 
+/// Phase 2 comparison mode: instead of (or alongside) the authoritative
+/// server, a client also has a peer-to-peer link to one other client, who
+/// publishes its own reconciled belief about the shared entity. This is
+/// the DDS-style "publish/subscribe between peers" alternative to
+/// `ServerOnlySource` — structurally identical (still just reads a
+/// `NetworkShim`), but kept as a distinct type because the whole point of
+/// wiring it up is to compare *which* source a client trusted, not to
+/// share an implementation.
+pub struct PeerPublishSource {
+    shim: NetworkShim<RemoteUpdate>,
+}
+
+impl PeerPublishSource {
+    pub fn new(shim: NetworkShim<RemoteUpdate>) -> Self {
+        Self { shim }
+    }
+
+    /// Publishes this client's own reconciled state to whichever peer is
+    /// subscribed via this source's network shim.
+    pub fn publish(&mut self, send_tick: u64, update: RemoteUpdate) {
+        self.shim.send(send_tick, update);
+    }
+}
+
+impl RemoteStateSource for PeerPublishSource {
+    fn latest(&mut self, tick: u64) -> Option<RemoteUpdate> {
+        self.shim.poll(tick).into_iter().max_by_key(|u| u.tick)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,5 +120,33 @@ mod tests {
 
         // 50ms @ 60Hz = round(50 / 16.667) = 3 ticks -> delivers at tick 13.
         assert_eq!(reconcile_fired_at, Some(13));
+    }
+
+    #[test]
+    fn peer_publish_source_delivers_published_state_at_expected_tick() {
+        let profile = LagProfile {
+            latency_ms: 10,
+            jitter_ms: 0,
+            loss_pct: 0.0,
+        };
+        let tick_rate_hz = 60;
+        let shim: NetworkShim<RemoteUpdate> = NetworkShim::new(profile, tick_rate_hz, 11);
+        let mut source = PeerPublishSource::new(shim);
+
+        let send_tick = 5u64;
+        let published_state = EntityState::new([4.0, 5.0, 6.0], [1.0, 0.0, 0.0]);
+        source.publish(
+            send_tick,
+            RemoteUpdate {
+                tick: send_tick,
+                state: published_state,
+            },
+        );
+
+        // 10ms @ 60Hz = round(10 / 16.667) = 1 tick -> delivers at tick 6.
+        assert!(source.latest(5).is_none());
+        let delivered = source.latest(6).expect("should deliver at tick 6");
+        assert_eq!(delivered.state.position, published_state.position);
+        assert!(source.latest(6).is_none(), "delivered exactly once");
     }
 }

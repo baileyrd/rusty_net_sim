@@ -22,11 +22,26 @@ pub struct ScenarioConfig {
     pub tick_count: u64,
     #[serde(default = "default_output_path")]
     pub output_path: PathBuf,
+    /// Network conditions for the peer-to-peer ring link each client uses
+    /// to publish its own reconciled state to its neighbor (phase 2,
+    /// `PeerPublishSource`). Defaults to a fast, LAN-like link — the
+    /// interesting comparison is a peer link that's *better* than the
+    /// (often worse) server link each client separately has.
+    #[serde(default = "default_peer_profile")]
+    pub peer: LagProfile,
     pub clients: Vec<ClientConfig>,
 }
 
 fn default_output_path() -> PathBuf {
     PathBuf::from("metrics.jsonl")
+}
+
+fn default_peer_profile() -> LagProfile {
+    LagProfile {
+        latency_ms: 5,
+        jitter_ms: 1,
+        loss_pct: 0.0,
+    }
 }
 
 /// Failure to load or parse a scenario TOML file.
@@ -86,6 +101,33 @@ mod tests {
         assert_eq!(config.clients[0].lag_profile.latency_ms, 20);
         assert_eq!(config.clients[1].lag_profile.jitter_ms, 25);
         assert_eq!(config.output_path, PathBuf::from("metrics.jsonl"));
+        assert_eq!(config.peer.latency_ms, 5);
+        assert_eq!(config.peer.jitter_ms, 1);
+        assert_eq!(config.peer.loss_pct, 0.0);
+    }
+
+    #[test]
+    fn peer_profile_is_overridable() {
+        let toml = r#"
+            seed = 1
+            tick_rate_hz = 60
+            tick_count = 10
+
+            [peer]
+            latency_ms = 15
+            jitter_ms = 4
+            loss_pct = 2.0
+
+            [[clients]]
+            id = "c1"
+            latency_ms = 0
+            jitter_ms = 0
+            loss_pct = 0.0
+        "#;
+        let config: ScenarioConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.peer.latency_ms, 15);
+        assert_eq!(config.peer.jitter_ms, 4);
+        assert_eq!(config.peer.loss_pct, 2.0);
     }
 
     #[test]
