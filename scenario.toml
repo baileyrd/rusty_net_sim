@@ -1,0 +1,52 @@
+seed = 42
+tick_rate_hz = 60
+tick_count = 3600  # 60s at 60Hz
+output_path = "metrics.jsonl"
+
+[[clients]]
+id = "c1"
+latency_ms = 20
+jitter_ms = 5
+loss_pct = 0.0
+
+[[clients]]
+id = "c2"
+latency_ms = 80
+jitter_ms = 25
+loss_pct = 1.0
+
+[[clients]]
+id = "c3"
+latency_ms = 40
+jitter_ms = 10
+loss_pct = 0.5
+
+[[clients]]
+id = "c4"
+latency_ms = 150
+jitter_ms = 60
+loss_pct = 3.0
+
+[[clients]]
+id = "c5"
+latency_ms = 15
+jitter_ms = 3
+loss_pct = 0.0
+
+[[clients]]
+id = "c6"
+latency_ms = 100
+jitter_ms = 40
+loss_pct = 2.0
+
+[[clients]]
+id = "c7"
+latency_ms = 25
+jitter_ms = 5
+loss_pct = 0.0
+
+[[clients]]
+id = "c8"
+latency_ms = 200
+jitter_ms = 80
+loss_pct = 5.0
