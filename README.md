@@ -66,6 +66,7 @@ seed = 42
 tick_rate_hz = 60
 tick_count = 3600        # 60s at 60Hz
 output_path = "metrics.jsonl"   # optional, defaults to metrics.jsonl
+replay_path = "replay.jsonl"    # optional; omit to skip replay recording
 
 [peer]                   # optional; defaults to a fast/LAN-like link
 latency_ms = 5
@@ -104,6 +105,22 @@ Deliberately plain JSONL rather than a bundled plotting dependency —
 analysis happens separately in whatever's convenient (a notebook, a
 script, a spreadsheet).
 
+## Replay output (optional)
+
+Setting `replay_path` in the scenario config additionally writes one JSON
+Lines record per **tick** (not per tick/client) with the authoritative
+server's ground-truth position and every client's current canonical
+predicted position — a top-down (x, y) projection, dropping z:
+
+```json
+{"tick": 412, "server": [120.4, -58.1], "clients": {"c1": [119.9, -57.8], "c2": [121.0, -58.4]}}
+```
+
+This is a separate file/shape from `metrics.jsonl` on purpose: one is for
+reconciliation-quality analysis (per-client scalars), the other is for
+animated playback (per-tick positions) — different consumer, different
+shape, same plain-JSONL philosophy.
+
 ## Architecture
 
 | Module | Responsibility |
@@ -114,6 +131,7 @@ script, a spreadsheet).
 | `reconciler.rs` | `ConfidenceTracker` / `ReconciliationPolicy` / `RollbackReconciler` |
 | `source.rs` | `RemoteStateSource` trait; `ServerOnlySource` and `PeerPublishSource` |
 | `metrics.rs` | `MetricsRecorder` — JSONL writer |
+| `replay.rs` | `ReplayRecorder` — optional per-tick position JSONL writer, for playback |
 | `config.rs` | `ScenarioConfig` — TOML scenario definition |
 | `main.rs` | Wires it all together: world, per-client server + peer tracks, ring topology, metrics loop |
 

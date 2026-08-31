@@ -2,6 +2,7 @@ mod config;
 mod entity;
 mod metrics;
 mod reconciler;
+mod replay;
 mod shim;
 mod source;
 mod world;
@@ -10,6 +11,7 @@ use config::ScenarioConfig;
 use entity::EntityState;
 use metrics::MetricsRecorder;
 use reconciler::RollbackReconciler;
+use replay::ReplayRecorder;
 use shim::NetworkShim;
 use source::{PeerPublishSource, RemoteStateSource, RemoteUpdate, ServerOnlySource};
 use world::AuthoritativeWorld;
@@ -187,6 +189,11 @@ fn run(scenario_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     let mut recorder = MetricsRecorder::create(&config.output_path)?;
+    let mut replay_recorder = config
+        .replay_path
+        .as_ref()
+        .map(ReplayRecorder::create)
+        .transpose()?;
     let client_count = clients.len();
 
     for _ in 0..config.tick_count {
@@ -211,19 +218,29 @@ fn run(scenario_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 
         // 3. Ring: each client publishes its just-updated canonical belief
         //    to its one neighbor (client i -> client (i + 1) % N).
+        let published: Vec<EntityState> =
+            clients.iter().map(SimulatedClient::publish_state).collect();
         if client_count > 0 {
-            let published: Vec<EntityState> =
-                clients.iter().map(SimulatedClient::publish_state).collect();
-            for (i, state) in published.into_iter().enumerate() {
+            for (i, state) in published.iter().enumerate() {
                 let next = (i + 1) % client_count;
                 clients[next].peer_source.publish(
                     snapshot.tick,
                     RemoteUpdate {
                         tick: snapshot.tick,
-                        state,
+                        state: *state,
                     },
                 );
             }
+        }
+
+        // 3b. Optional replay snapshot: server ground truth + every
+        //     client's just-published (canonical) predicted position.
+        if let Some(replay_recorder) = replay_recorder.as_mut() {
+            let client_positions = clients
+                .iter()
+                .zip(published.iter())
+                .map(|(client, state)| (client.id.as_str(), state));
+            replay_recorder.record(snapshot.tick, &snapshot.state, client_positions)?;
         }
 
         // 4. Each client steps its shadow peer track and records metrics.
@@ -241,6 +258,9 @@ fn run(scenario_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     recorder.flush()?;
+    if let Some(replay_recorder) = replay_recorder.as_mut() {
+        replay_recorder.flush()?;
+    }
     Ok(())
 }
 

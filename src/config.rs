@@ -29,6 +29,11 @@ pub struct ScenarioConfig {
     /// (often worse) server link each client separately has.
     #[serde(default = "default_peer_profile")]
     pub peer: LagProfile,
+    /// Optional per-tick position recording (server + every client's
+    /// canonical predicted position) for an animated replay viewer. Off by
+    /// default — most scenario runs only care about `metrics.jsonl`.
+    #[serde(default)]
+    pub replay_path: Option<PathBuf>,
     pub clients: Vec<ClientConfig>,
 }
 
@@ -146,6 +151,38 @@ mod tests {
         "#;
         let config: ScenarioConfig = toml::from_str(toml).unwrap();
         assert_eq!(config.output_path, PathBuf::from("out.jsonl"));
+    }
+
+    #[test]
+    fn replay_path_defaults_to_none_and_is_settable() {
+        let base = r#"
+            seed = 1
+            tick_rate_hz = 60
+            tick_count = 10
+
+            [[clients]]
+            id = "c1"
+            latency_ms = 0
+            jitter_ms = 0
+            loss_pct = 0.0
+        "#;
+        let config: ScenarioConfig = toml::from_str(base).unwrap();
+        assert_eq!(config.replay_path, None);
+
+        let with_replay = r#"
+            seed = 1
+            tick_rate_hz = 60
+            tick_count = 10
+            replay_path = "replay.jsonl"
+
+            [[clients]]
+            id = "c1"
+            latency_ms = 0
+            jitter_ms = 0
+            loss_pct = 0.0
+        "#;
+        let config: ScenarioConfig = toml::from_str(with_replay).unwrap();
+        assert_eq!(config.replay_path, Some(PathBuf::from("replay.jsonl")));
     }
 
     #[test]
