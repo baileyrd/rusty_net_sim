@@ -3,6 +3,14 @@ tick_rate_hz = 60
 tick_count = 3600  # 60s at 60Hz
 output_path = "metrics.jsonl"
 
+# Peer-to-peer ring link (phase 2, PeerPublishSource) — deliberately much
+# better than most of the server links below, to see whether trusting a
+# peer would have helped a high-latency client.
+[peer]
+latency_ms = 5
+jitter_ms = 1
+loss_pct = 0.0
+
 [[clients]]
 id = "c1"
 latency_ms = 20
